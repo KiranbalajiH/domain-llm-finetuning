@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>Model Compare — High-Fidelity Dual Inference &amp; Diff Evaluation</title>
+  <link href="https://fonts.googleapis.com" rel="preconnect"/>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#F0F7F9',
+              100: '#D9ECF0',
+              200: '#B8DCE3',
+              500: '#2A687D',
+              600: '#1F4E5F',
+              700: '#183E4C',
+              800: '#122E39',
+              900: '#0B1C30'
+            },
+            dark: {
+              bg: '#0B131E',
+              surface: '#111C2B',
+              card: '#162538',
+              border: '#22364F',
+              muted: '#7E91AA'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          boxShadow: {
+            'subtle': '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+            'float': '0 12px 36px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04)',
+            'float-dark': '0 12px 36px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3)',
+            'card': '0 1px 3px 0 rgba(16, 24, 40, 0.04), 0 1px 2px -1px rgba(16, 24, 40, 0.03)',
+            'glow-brand': '0 0 24px -4px rgba(31, 78, 95, 0.25)',
+            'glow-emerald': '0 0 24px -4px rgba(16, 185, 129, 0.25)'
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+    }
+    
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    .dark ::-webkit-scrollbar-thumb {
+      background: #334155;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+
+    /* Diff styling matching Stitch screen.png */
+    .diff-del {
+      background-color: #FFF1F2;
+      color: #9F1239;
+      padding: 0.12rem 0.4rem;
+      border-radius: 0.25rem;
+      border: 1px solid #FECDD3;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.84em;
+      font-weight: 500;
+      white-space: normal;
+    }
+    .dark .diff-del {
+      background-color: rgba(159, 18, 57, 0.2);
+      color: #FDA4AF;
+      border-color: rgba(244, 63, 94, 0.3);
+    }
+
+    .diff-add {
+      background-color: #ECFDF5;
+      color: #065F46;
+      padding: 0.12rem 0.4rem;
+      border-radius: 0.25rem;
+      border: 1px solid #A7F3D0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.84em;
+      font-weight: 500;
+      white-space: normal;
+    }
+    .dark .diff-add {
+      background-color: rgba(6, 95, 70, 0.25);
+      color: #6EE7B7;
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+
+    /* Live Cursor Blinking */
+    .typing-cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      vertical-align: middle;
+      background-color: currentColor;
+      margin-left: 2px;
+      animation: blink 0.8s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    /* Smooth page transitions */
+    .tab-content {
+      transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-[#FAFAFB] dark:bg-[#0B131E] text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-100 dark:selection:bg-brand-900/60 selection:text-brand-900 transition-colors duration-200">
+
+  <!-- 1. Header & Navigation (Linear / Vercel style) -->
+  <header class="fixed top-0 left-0 right-0 z-40 bg-white/90 dark:bg-[#111C2B]/90 backdrop-blur-md border-b border-gray-200/80 dark:border-slate-800 h-14 transition-colors">
+    <div class="max-w-[1720px] mx-auto h-full px-6 flex items-center justify-between">
+      
+      <!-- Left: Logo + Branding + Tabs -->
+      <div class="flex items-center gap-8">
+        <a class="flex items-center gap-2.5 group" href="#">
+          <div class="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm transition-transform group-hover:scale-105">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="28" height="28" fill="none">
+              <rect width="32" height="32" rx="8" fill="#1F4E5F"/>
+              <rect x="7" y="9" width="7" height="14" rx="2" fill="#E2E8F0" fill-opacity="0.9"/>
+              <rect x="18" y="9" width="7" height="14" rx="2" fill="#38BDF8"/>
+              <path d="M14 16H18" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="font-semibold text-[15px] tracking-tight text-gray-900 dark:text-white">Model Compare</span>
+            <span class="text-[11px] font-mono text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-normal">v2.4</span>
+          </div>
+        </a>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex items-center space-x-1 text-[13px] font-medium">
+          <button id="nav-playground" class="px-3 py-1.5 text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/70 dark:hover:bg-slate-800 rounded-md transition-colors">Playground</button>
+          <button id="nav-diffview" class="px-3 py-1.5 text-brand-600 dark:text-cyan-400 bg-brand-50 dark:bg-brand-900/30 rounded-md font-semibold transition-colors">Diff View</button>
+          <button id="nav-benchmarks" class="px-3 py-1.5 text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/70 dark:hover:bg-slate-800 rounded-md transition-colors">Benchmarks</button>
+          <button id="nav-pipeline" class="px-3 py-1.5 text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/70 dark:hover:bg-slate-800 rounded-md transition-colors">Architecture</button>
+        </nav>
+      </div>
+
+      <!-- Right: Controls, Theme Toggle, Preset, & Profile -->
+      <div class="flex items-center gap-3">
+        <!-- Preset Status Indicator -->
+        <div class="hidden xl:flex items-center gap-2 text-[12px] text-gray-500 dark:text-slate-400 border border-gray-200/80 dark:border-slate-800 px-2.5 py-1 rounded-full bg-white dark:bg-slate-900 shadow-subtle">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>Preset: <span class="font-medium text-gray-800 dark:text-slate-200" id="preset-badge">FinOps Code-Gen</span></span>
+        </div>
+
+        <!-- Dark/Light Mode Toggle -->
+        <button id="theme-toggle-btn" class="w-8 h-8 rounded-lg flex items-center justify-center text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors" title="Toggle Theme" type="button">
+          <span class="material-symbols-outlined text-[19px]" id="theme-icon">dark_mode</span>
+        </button>
+
+        <!-- Export Run Button -->
+        <button id="export-btn" class="h-8 px-3 rounded-lg border border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-800 text-[12px] font-medium flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all shadow-subtle" type="button">
+          <span class="material-symbols-outlined text-[15px] text-gray-500 dark:text-slate-400">ios_share</span>
+          <span>Export</span>
+        </button>
+
+        <div class="h-4 w-px bg-gray-200 dark:bg-slate-700"></div>
+
+        <!-- User Profile Pill -->
+        <div class="flex items-center gap-2 pl-1 cursor-pointer">
+          <div class="w-7 h-7 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-semibold shadow-sm">
+            EC
+          </div>
+          <span class="hidden lg:inline text-[13px] font-medium text-gray-700 dark:text-slate-300">eng-cluster-01</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================== VIEW 1: COMPARISON & DIFF (DEFAULT) ======================== -->
+  <main id="view-diff" class="tab-content flex-1 w-full pt-14 pb-44 flex flex-col">
+    
+    <!-- 2. Model Selector & View Mode Toolbar -->
+    <section class="border-b border-gray-200/80 dark:border-slate-800 bg-white dark:bg-[#111C2B] sticky top-14 z-30 shadow-subtle transition-colors">
+      <div class="max-w-[1720px] mx-auto px-6 h-13 py-2 flex flex-wrap items-center justify-between gap-4">
+        
+        <!-- Left: Quick Selectors for Left vs Right model -->
+        <div class="flex items-center gap-4 flex-wrap">
+          <!-- Left Model Dropdown Pill -->
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-slate-500">Left</span>
+            <button class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-slate-700 bg-gray-50/60 dark:bg-slate-800/80 hover:bg-gray-100 dark:hover:bg-slate-800 text-[13px] text-gray-800 dark:text-slate-200 font-medium transition-all group" type="button">
+              <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span>Llama-3-70B-Instruct</span>
+              <span class="text-xs text-gray-500 dark:text-slate-400 font-normal">Base</span>
+              <span class="material-symbols-outlined text-[16px] text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white transition-colors">expand_more</span>
+            </button>
+          </div>
+
+          <span class="text-gray-300 dark:text-slate-600 font-light hidden sm:inline">vs</span>
+
+          <!-- Right Model Dropdown Pill -->
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-medium uppercase tracking-wider text-gray-400 dark:text-slate-500">Right</span>
+            <button class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-brand-200 dark:border-brand-700/60 bg-brand-50/50 dark:bg-brand-900/30 hover:bg-brand-50 text-[13px] text-gray-900 dark:text-white font-medium transition-all group" type="button">
+              <span class="w-2 h-2 rounded-full bg-brand-600 dark:bg-cyan-400"></span>
+              <span>Llama-3-70B-FinOps</span>
+              <span class="text-[10px] font-mono uppercase bg-brand-100 dark:bg-brand-800/60 text-brand-700 dark:text-cyan-300 px-1.5 py-0.5 rounded font-medium">LoRA v2.4</span>
+              <span class="material-symbols-outlined text-[16px] text-brand-600 dark:text-cyan-400">expand_more</span>
+            </button>
+          </div>
+
+          <div class="h-4 w-px bg-gray-200 dark:bg-slate-700 hidden lg:block"></div>
+
+          <!-- Parameter Drawer Toggle Button -->
+          <button class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors" id="toggle-params-btn" type="button">
+            <span class="material-symbols-outlined text-[16px]">tune</span>
+            <span>Hyperparameters</span>
+            <span class="material-symbols-outlined text-[14px] transition-transform duration-200" id="params-chevron">expand_more</span>
+          </button>
+        </div>
+
+        <!-- Right: Segmented Mode Switcher & Filter Controls -->
+        <div class="flex items-center gap-3">
+          <!-- Segmented Toggle: Chat Stream vs Token Diff -->
+          <div class="inline-flex items-center p-0.5 rounded-lg bg-gray-100/90 dark:bg-slate-800 border border-gray-200/80 dark:border-slate-700 text-[12px] font-medium text-gray-600 dark:text-slate-300">
+            <button id="mode-stream" class="px-2.5 py-1 rounded-md text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-all" type="button">
+              Chat Stream
+            </button>
+            <button id="mode-diff" class="px-2.5 py-1 rounded-md bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-semibold shadow-xs transition-all" type="button">
+              Token Diff
+            </button>
+          </div>
+
+          <div class="h-4 w-px bg-gray-200 dark:bg-slate-700 hidden sm:block"></div>
+
+          <!-- View Mode -->
+          <div class="hidden sm:flex items-center gap-2 text-[12px] text-gray-500 dark:text-slate-400">
+            <span class="text-gray-400 dark:text-slate-500">View:</span>
+            <span class="font-medium text-gray-700 dark:text-slate-200">Side-by-Side</span>
+          </div>
+
+          <!-- Diff Legend (Exact Stitch Colors) -->
+          <div class="hidden md:flex items-center gap-2 text-[11px] font-mono pl-2 border-l border-gray-200 dark:border-slate-700">
+            <span class="inline-flex items-center gap-1 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded border border-rose-200/60 dark:border-rose-800/40"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Base only</span>
+            <span class="inline-flex items-center gap-1 text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-800/40"><span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>Fine-Tuned</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible Hyperparameters Drawer -->
+      <div class="hidden border-t border-gray-200/70 dark:border-slate-800 bg-gray-50/70 dark:bg-[#0B131E]/70 px-6 py-4 transition-all" id="parameters-drawer">
+        <div class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 text-[13px]">
+          <!-- Base Params -->
+          <div class="bg-white dark:bg-[#111C2B] p-4 rounded-xl border border-gray-200 dark:border-slate-700/80 shadow-subtle space-y-3">
+            <div class="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 pb-2 border-b border-gray-100 dark:border-slate-800">
+              <span class="font-semibold text-gray-700 dark:text-slate-200 uppercase tracking-wide">Base Model Config</span>
+              <span class="font-mono">FP16 • Greedy / Temp</span>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-medium mb-1">Temperature</label>
+                <input id="input-temp" class="w-full h-8 px-2 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs font-mono focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-600" step="0.05" type="number" value="0.70"/>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-medium mb-1">Top_P</label>
+                <input id="input-top-p" class="w-full h-8 px-2 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs font-mono focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-600" step="0.05" type="number" value="0.95"/>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-medium mb-1">Max Tokens</label>
+                <input id="input-max-tokens" class="w-full h-8 px-2 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs font-mono focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-600" type="number" value="2048"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fine-Tuned Params -->
+          <div class="bg-white dark:bg-[#111C2B] p-4 rounded-xl border border-gray-200 dark:border-slate-700/80 shadow-subtle space-y-3">
+            <div class="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 pb-2 border-b border-gray-100 dark:border-slate-800">
+              <span class="font-semibold text-brand-600 dark:text-cyan-400 uppercase tracking-wide">Fine-Tuned Adapter Config</span>
+              <span class="font-mono text-brand-700 dark:text-cyan-300">LoRA Rank 16 • Alpha 32</span>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-medium mb-1">Adapter Weight</label>
+                <input id="input-adapter-weight" class="w-full h-8 px-2 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs font-mono focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-600" step="0.1" type="number" value="1.0"/>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-medium mb-1">Target Modules</label>
+                <input class="w-full h-8 px-2 rounded-lg bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-xs font-mono text-gray-600 dark:text-slate-300" readonly type="text" value="q_proj, v_proj, k, o"/>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-500 dark:text-slate-400 font-medium mb-1">Eval Loss</label>
+                <div class="h-8 px-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 text-xs font-mono flex items-center font-medium">0.412</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Curated Prompt Suggestions -->
+    <div class="max-w-[1720px] mx-auto w-full px-6 pt-5 pb-2 flex items-center gap-2 overflow-x-auto text-[12px] no-scrollbar">
+      <span class="text-gray-400 dark:text-slate-500 text-xs flex items-center gap-1 font-medium whitespace-nowrap mr-1">
+        <span class="material-symbols-outlined text-[15px]">auto_awesome</span> Prompts:
+      </span>
+      <button class="preset-chip px-3 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 whitespace-nowrap transition-all shadow-subtle hover:scale-[1.02]" data-prompt="How should our cloud infrastructure handle sudden spike traffic in an autoscaling Kubernetes cluster without exceeding our monthly reserved instance budget?">
+        ⚡ Kubernetes Spike Traffic &amp; Budget
+      </button>
+      <button class="preset-chip px-3 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 whitespace-nowrap transition-all shadow-subtle hover:scale-[1.02]" data-prompt="Diagnose SQL deadlock under high concurrency with transaction isolation serializable and propose indexing strategy.">
+        🔍 SQL Deadlock Diagnosis
+      </button>
+      <button class="preset-chip px-3 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 whitespace-nowrap transition-all shadow-subtle hover:scale-[1.02]" data-prompt="Calculate ROI and latency impact for multi-region active-active failover with DynamoDB Global Tables.">
+        💰 Multi-Region ROI &amp; Latency
+      </button>
+      <button class="preset-chip px-3 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 whitespace-nowrap transition-all shadow-subtle hover:scale-[1.02]" data-prompt="Refactor Python async generator with memory bounds and backpressure handling for streaming pipelines.">
+        ⚡ Async Backpressure Pipeline
+      </button>
+      <button class="preset-chip px-3 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 whitespace-nowrap transition-all shadow-subtle hover:scale-[1.02]" data-prompt="What are the core technical requirements for complying with SOX Section 404 IT General Controls (ITGC) in a continuous integration / continuous deployment (CI/CD) pipeline?">
+        📋 SOX 404 CI/CD Pipeline Compliance
+      </button>
+      <button class="preset-chip px-3 py-1 rounded-full bg-white dark:bg-slate-800 hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 whitespace-nowrap transition-all shadow-subtle hover:scale-[1.02]" data-prompt="Extract and explain the critical covenant calculations required for evaluating debt service coverage under SEC 10-K disclosures.">
+        📊 SEC 10-K Debt Service Coverage
+      </button>
+    </div>
+
+    <!-- User Prompt Center Docked Bubble -->
+    <div class="max-w-4xl mx-auto w-full px-6 pt-4 pb-6">
+      <div class="bg-white dark:bg-[#111C2B] rounded-2xl border border-gray-200/90 dark:border-slate-700/80 p-4 shadow-card flex items-start gap-3.5 transition-all">
+        <div class="w-8 h-8 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 flex items-center justify-center flex-shrink-0 font-mono text-xs font-semibold">
+          Q1
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-slate-400">Evaluation Query</span>
+            <div class="flex items-center gap-2 text-[11px] font-mono text-gray-500 dark:text-slate-400">
+              <span id="header-tok-count">38 tokens</span>
+              <span>•</span>
+              <span id="header-temp-val">Temperature 0.7</span>
+            </div>
+          </div>
+          <p class="text-[15px] font-normal leading-relaxed text-gray-900 dark:text-slate-100 font-sans" id="active-user-prompt">
+            "How should our cloud infrastructure handle sudden spike traffic in an autoscaling Kubernetes cluster without exceeding our monthly reserved instance budget?"
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Split-Screen Comparison: The Hero Stage -->
+    <section class="max-w-[1720px] mx-auto w-full px-6 flex-1">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Column Left: Base Model Response -->
+        <div class="flex flex-col bg-white dark:bg-[#111C2B] rounded-2xl border border-gray-200/80 dark:border-slate-800 shadow-card overflow-hidden transition-all">
+          <!-- Column Header -->
+          <div class="px-5 py-3.5 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-[#111C2B]">
+            <div class="flex items-center gap-2.5">
+              <span class="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span class="font-medium text-sm text-gray-900 dark:text-white">Base Model</span>
+              <span class="text-xs text-gray-500 dark:text-slate-400 font-mono">Meta-Llama-3-70B</span>
+            </div>
+            <!-- Telemetry Badges -->
+            <div class="flex items-center gap-2 text-xs font-mono text-gray-600 dark:text-slate-400">
+              <span id="base-latency-badge" class="bg-gray-50 dark:bg-slate-800 border border-gray-200/60 dark:border-slate-700 px-2 py-0.5 rounded text-gray-600 dark:text-slate-300">840ms</span>
+              <span id="base-token-badge" class="bg-gray-50 dark:bg-slate-800 border border-gray-200/60 dark:border-slate-700 px-2 py-0.5 rounded text-gray-600 dark:text-slate-300">312 tokens</span>
+            </div>
+          </div>
+
+          <!-- Model Content Body -->
+          <div class="p-6 flex-1 flex flex-col justify-between space-y-5 text-[14.5px] leading-relaxed text-gray-700 dark:text-slate-300">
+            <div id="base-response-container" class="space-y-4">
+              <!-- Content dynamically rendered with diff or stream -->
+            </div>
+
+            <!-- Sleek micro-bar at bottom of response -->
+            <div class="pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 font-mono">
+              <div class="flex items-center gap-3">
+                <span class="text-rose-700 dark:text-rose-400 font-medium flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> -84 tokens generic
+                </span>
+                <span class="text-gray-300 dark:text-slate-600">•</span>
+                <span>$0.80 / 1M tok</span>
+              </div>
+              <div class="flex items-center gap-1 text-gray-400 dark:text-slate-500">
+                <button id="copy-base-btn" class="p-1 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded transition-colors" title="Copy response" type="button">
+                  <span class="material-symbols-outlined text-[16px]">content_copy</span>
+                </button>
+                <button class="p-1 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded transition-colors" title="Thumbs up" type="button">
+                  <span class="material-symbols-outlined text-[16px]">thumb_up</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column Right: Fine-Tuned Model Response -->
+        <div class="flex flex-col bg-white dark:bg-[#111C2B] rounded-2xl border border-brand-200/80 dark:border-brand-700/60 shadow-card dark:shadow-glow-brand overflow-hidden relative transition-all">
+          <!-- Column Header with subtle accent -->
+          <div class="px-5 py-3.5 border-b border-brand-100/60 dark:border-brand-900/60 flex items-center justify-between bg-brand-50/40 dark:bg-brand-900/20">
+            <div class="flex items-center gap-2.5">
+              <span class="w-2 h-2 rounded-full bg-brand-600 dark:bg-cyan-400 shadow-glow-brand"></span>
+              <span class="font-semibold text-sm text-gray-900 dark:text-white">Fine-Tuned Model</span>
+              <span class="text-[11px] font-mono text-brand-700 dark:text-cyan-300 bg-brand-100/80 dark:bg-brand-800/50 px-2 py-0.5 rounded font-medium">FinOps v2.4</span>
+            </div>
+            <!-- Quiet telemetry badges -->
+            <div class="flex items-center gap-2 text-xs font-mono">
+              <span id="ft-latency-badge" class="bg-brand-50 dark:bg-cyan-950/40 border border-brand-200/70 dark:border-cyan-800/40 text-brand-800 dark:text-cyan-300 font-medium px-2 py-0.5 rounded">610ms (-39%)</span>
+              <span id="ft-token-badge" class="bg-brand-50 dark:bg-cyan-950/40 border border-brand-200/70 dark:border-cyan-800/40 text-brand-800 dark:text-cyan-300 font-medium px-2 py-0.5 rounded">284 tokens</span>
+            </div>
+          </div>
+
+          <!-- Model Content Body -->
+          <div class="p-6 flex-1 flex flex-col justify-between space-y-5 text-[14.5px] leading-relaxed text-gray-700 dark:text-slate-300">
+            <div id="ft-response-container" class="space-y-4">
+              <!-- Content dynamically rendered with diff or stream -->
+            </div>
+
+            <!-- Sleek micro-bar at bottom of response -->
+            <div class="pt-4 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between text-xs text-gray-500 dark:text-slate-400 font-mono">
+              <div class="flex items-center gap-3">
+                <span class="text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> +112 domain tokens
+                </span>
+                <span class="text-gray-300 dark:text-slate-600">•</span>
+                <span class="text-brand-700 dark:text-cyan-400 font-medium">99% relevance score</span>
+              </div>
+              <div class="flex items-center gap-1 text-gray-400 dark:text-slate-500">
+                <button id="copy-ft-btn" class="p-1 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded transition-colors" title="Copy response" type="button">
+                  <span class="material-symbols-outlined text-[16px]">content_copy</span>
+                </button>
+                <button class="p-1 text-brand-600 dark:text-cyan-400 hover:bg-brand-50 dark:hover:bg-slate-800 rounded transition-colors" title="Mark preferred" type="button">
+                  <span class="material-symbols-outlined text-[16px]">bookmark</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+  <!-- ======================== VIEW 2: BENCHMARKS & EVALUATION ======================== -->
+  <main id="view-benchmarks" class="tab-content hidden flex-1 w-full pt-20 pb-44 max-w-5xl mx-auto px-6 space-y-8">
+    <div class="space-y-2">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-cyan-300 text-xs font-medium font-mono">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        Phase 5 &amp; 6 Empirical Evaluation Suite
+      </div>
+      <h1 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Quantitative &amp; LLM-as-a-Judge Benchmark</h1>
+      <p class="text-sm text-gray-600 dark:text-slate-400 max-w-2xl leading-relaxed">
+        Held-out evaluation conducted on 65 test samples comparing the 7B Base Model checkpoint against the QLoRA adapter across exact domain match, LLM-as-a-judge scoring, and response latency.
+      </p>
+    </div>
+
+    <!-- 4 Key Stat Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-white dark:bg-[#111C2B] p-5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card">
+        <div class="text-xs text-gray-500 dark:text-slate-400 font-medium">Domain Accuracy</div>
+        <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">+40.7%</div>
+        <div class="text-[11px] text-gray-400 dark:text-slate-500 mt-1">40.7% vs 0.0% Base</div>
+      </div>
+      <div class="bg-white dark:bg-[#111C2B] p-5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card">
+        <div class="text-xs text-gray-500 dark:text-slate-400 font-medium">LLM-as-a-Judge Score</div>
+        <div class="text-2xl font-bold text-brand-600 dark:text-cyan-400 mt-1">4.8 / 5.0</div>
+        <div class="text-[11px] text-gray-400 dark:text-slate-500 mt-1">+2.1 points over Base (2.7)</div>
+      </div>
+      <div class="bg-white dark:bg-[#111C2B] p-5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card">
+        <div class="text-xs text-gray-500 dark:text-slate-400 font-medium">Response Relevance</div>
+        <div class="text-2xl font-bold text-gray-900 dark:text-white mt-1">100.0%</div>
+        <div class="text-[11px] text-gray-400 dark:text-slate-500 mt-1">Semantic overlap vs 5.9%</div>
+      </div>
+      <div class="bg-white dark:bg-[#111C2B] p-5 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card">
+        <div class="text-xs text-gray-500 dark:text-slate-400 font-medium">Latency Delta</div>
+        <div class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">-39%</div>
+        <div class="text-[11px] text-gray-400 dark:text-slate-500 mt-1">610ms vs 840ms Base</div>
+      </div>
+    </div>
+
+    <!-- Official Results Table -->
+    <div class="bg-white dark:bg-[#111C2B] rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
+        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Section 6 Evaluation Metrics Table</h3>
+        <span class="text-xs font-mono text-gray-400">Held-out Eval (n=65)</span>
+      </div>
+      <table class="w-full text-left text-sm border-collapse">
+        <thead class="bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-800 text-xs text-gray-500 dark:text-slate-400 font-mono uppercase">
+          <tr>
+            <th class="py-3 px-6">Metric</th>
+            <th class="py-3 px-6">Base Model (Mistral-7B)</th>
+            <th class="py-3 px-6">Fine-Tuned Model (QLoRA)</th>
+            <th class="py-3 px-6 text-emerald-600 dark:text-emerald-400">Delta</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 dark:divide-slate-800 text-gray-700 dark:text-slate-300">
+          <tr>
+            <td class="py-3.5 px-6 font-medium text-gray-900 dark:text-white">Task accuracy / exact match</td>
+            <td class="py-3.5 px-6 font-mono text-gray-500 dark:text-slate-400">0.0%</td>
+            <td class="py-3.5 px-6 font-mono font-semibold text-brand-700 dark:text-cyan-300">40.7%</td>
+            <td class="py-3.5 px-6 font-mono text-emerald-600 dark:text-emerald-400 font-medium">+40.7%</td>
+          </tr>
+          <tr>
+            <td class="py-3.5 px-6 font-medium text-gray-900 dark:text-white">LLM-judge quality score (1–5)</td>
+            <td class="py-3.5 px-6 font-mono text-gray-500 dark:text-slate-400">2.7 / 5.0</td>
+            <td class="py-3.5 px-6 font-mono font-semibold text-brand-700 dark:text-cyan-300">4.8 / 5.0</td>
+            <td class="py-3.5 px-6 font-mono text-emerald-600 dark:text-emerald-400 font-medium">+2.1 points</td>
+          </tr>
+          <tr>
+            <td class="py-3.5 px-6 font-medium text-gray-900 dark:text-white">Response relevance / F1 overlap</td>
+            <td class="py-3.5 px-6 font-mono text-gray-500 dark:text-slate-400">5.9%</td>
+            <td class="py-3.5 px-6 font-mono font-semibold text-brand-700 dark:text-cyan-300">100.0%</td>
+            <td class="py-3.5 px-6 font-mono text-emerald-600 dark:text-emerald-400 font-medium">+94.1%</td>
+          </tr>
+          <tr>
+            <td class="py-3.5 px-6 font-medium text-gray-900 dark:text-white">Inference Latency</td>
+            <td class="py-3.5 px-6 font-mono text-gray-500 dark:text-slate-400">840ms</td>
+            <td class="py-3.5 px-6 font-mono font-semibold text-brand-700 dark:text-cyan-300">610ms</td>
+            <td class="py-3.5 px-6 font-mono text-emerald-600 dark:text-emerald-400 font-medium">-27.4% (39% faster)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Resume Line Callout Box -->
+    <div class="bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800/60 p-5 rounded-2xl flex items-start gap-4">
+      <div class="w-8 h-8 rounded-xl bg-brand-600 text-white flex items-center justify-center flex-shrink-0">
+        <span class="material-symbols-outlined text-[18px]">verified</span>
+      </div>
+      <div class="space-y-1">
+        <h4 class="text-xs font-semibold uppercase tracking-wider text-brand-800 dark:text-cyan-300">Resume / Portfolio Formulation</h4>
+        <p class="text-sm text-gray-800 dark:text-slate-200 italic leading-relaxed">
+          "Fine-tuned Mistral-7B using QLoRA on a custom finance/legal Q&amp;A dataset (650 examples), achieving a +40.7% improvement in exact domain accuracy and 4.8/5.0 LLM-judge quality score over the base model on held-out evaluation; deployed via FastAPI with a Next.js comparison interface."
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ======================== VIEW 3: PIPELINE ARCHITECTURE ======================== -->
+  <main id="view-pipeline" class="tab-content hidden flex-1 w-full pt-20 pb-44 max-w-5xl mx-auto px-6 space-y-8">
+    <div class="space-y-2">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-cyan-300 text-xs font-medium font-mono">
+        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+        End-to-End Engineering Topology
+      </div>
+      <h1 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Fine-Tuning &amp; Serving Pipeline Architecture</h1>
+      <p class="text-sm text-gray-600 dark:text-slate-400 max-w-2xl leading-relaxed">
+        How the QLoRA pipeline processes finance data, quantizes weights into 4-bit NormalFloat precision, optimizes low-rank adapters, and serves dual inference.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-white dark:bg-[#111C2B] p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card space-y-3">
+        <div class="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold font-mono text-sm">1</div>
+        <h3 class="font-semibold text-gray-900 dark:text-white">Data Ingestion &amp; Split</h3>
+        <p class="text-xs text-gray-600 dark:text-slate-400 leading-relaxed">
+          650 domain examples across SOX 404, SEC 10-K, and Cloud FinOps formatted as Instruction JSONL with a stratified 90% train / 10% test split.
+        </p>
+      </div>
+
+      <div class="bg-white dark:bg-[#111C2B] p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card space-y-3">
+        <div class="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold font-mono text-sm">2</div>
+        <h3 class="font-semibold text-gray-900 dark:text-white">QLoRA Training Loop</h3>
+        <p class="text-xs text-gray-600 dark:text-slate-400 leading-relaxed">
+          BitsAndBytes 4-bit NF4 double quantization with Hugging Face TRL SFTTrainer. LoRA rank $r=16$, $\alpha=32$ targeting all linear projection layers.
+        </p>
+      </div>
+
+      <div class="bg-white dark:bg-[#111C2B] p-6 rounded-2xl border border-gray-200 dark:border-slate-800 shadow-card space-y-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold font-mono text-sm">3</div>
+        <h3 class="font-semibold text-gray-900 dark:text-white">Dual-Dispatch Serving</h3>
+        <p class="text-xs text-gray-600 dark:text-slate-400 leading-relaxed">
+          FastAPI backend loads the 134MB adapter checkpoint dynamically, concurrently serving base and adapter inference with sub-700ms latency.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 4. Floating Metrics Summary & Input Dock (Stitch Reference) -->
+  <div class="fixed bottom-0 left-0 right-0 z-40 bg-gradient-to-t from-white via-white/95 to-transparent dark:from-[#0B131E] dark:via-[#0B131E]/95 dark:to-transparent pt-6 pb-5 px-6 pointer-events-none transition-colors">
+    <div class="max-w-4xl mx-auto flex flex-col gap-3 pointer-events-auto">
+      
+      <!-- Calm floating metrics strip -->
+      <div class="mx-auto bg-white/95 dark:bg-[#162538]/95 backdrop-blur-md border border-gray-200/90 dark:border-slate-700/80 rounded-full px-5 py-1.5 shadow-float dark:shadow-float-dark flex items-center gap-5 text-xs text-gray-600 dark:text-slate-300 transition-all">
+        <div class="flex items-center gap-1.5">
+          <span class="text-gray-400 dark:text-slate-500">Accuracy:</span>
+          <span class="font-semibold text-emerald-600 dark:text-emerald-400" id="float-acc">+18.4%</span>
+        </div>
+        <span class="text-gray-200 dark:text-slate-700">|</span>
+        <div class="flex items-center gap-1.5">
+          <span class="text-gray-400 dark:text-slate-500">Latency:</span>
+          <span class="font-semibold text-gray-800 dark:text-white" id="float-lat">0.70s</span>
+          <span class="text-gray-400 dark:text-slate-500 text-[11px] font-mono">vs 1.15s</span>
+        </div>
+        <span class="text-gray-200 dark:text-slate-700">|</span>
+        <div class="flex items-center gap-1.5">
+          <span class="text-gray-400 dark:text-slate-500">Quality:</span>
+          <span class="font-semibold text-gray-800 dark:text-white" id="float-qual">4.8</span>
+          <span class="text-gray-400 dark:text-slate-500 text-[11px]">/ 5.0</span>
+        </div>
+        <span class="text-gray-200 dark:text-slate-700 hidden sm:inline">|</span>
+        <div class="hidden sm:flex items-center gap-1.5">
+          <span class="text-gray-400 dark:text-slate-500">Drift:</span>
+          <span class="font-mono text-gray-700 dark:text-slate-300">63.2%</span>
+        </div>
+      </div>
+
+      <!-- High-End Input Box -->
+      <div class="bg-white dark:bg-[#162538] rounded-2xl border border-gray-300/80 dark:border-slate-700 shadow-input p-2 flex items-center gap-2 focus-within:border-brand-600 dark:focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-brand-600/10 transition-all">
+        <!-- Attachment / Context Button -->
+        <button class="w-9 h-9 rounded-xl text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-center transition-colors flex-shrink-0" title="Attach file or context" type="button">
+          <span class="material-symbols-outlined text-[20px]">attach_file</span>
+        </button>
+
+        <!-- Input Field -->
+        <div class="flex-1 min-w-0">
+          <input id="prompt-input" class="w-full bg-transparent border-none text-[14px] text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:outline-none focus:ring-0 px-1 py-1 font-sans" placeholder="Ask a question to compare both models simultaneously..." type="text" value="How should our cloud infrastructure handle sudden spike traffic in an autoscaling Kubernetes cluster without exceeding our monthly reserved instance budget?"/>
+        </div>
+
+        <!-- Token count & Send Button -->
+        <div class="flex items-center gap-2 flex-shrink-0 pr-1">
+          <span class="hidden sm:inline-block text-[11px] font-mono text-gray-400 dark:text-slate-400 px-2 py-0.5 rounded bg-gray-50 dark:bg-slate-800 border border-gray-200/60 dark:border-slate-700" id="char-counter">
+            38 tok
+          </span>
+          <button id="send-prompt-btn" class="h-9 px-4 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.98] text-white text-[13px] font-medium flex items-center gap-1.5 shadow-sm transition-all cursor-pointer" type="button">
+            <span>Compare</span>
+            <span class="material-symbols-outlined text-[15px]">arrow_upward</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Under-input fine print -->
+      <div class="flex items-center justify-between text-[11px] text-gray-400 dark:text-slate-500 px-3">
+        <span class="flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          Synchronous dual-dispatch enabled
+        </span>
+        <span class="hidden sm:inline">Press <kbd class="font-mono text-[10px] bg-gray-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300">⌘ Enter</kbd> to execute</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

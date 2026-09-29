@@ -1,0 +1,40 @@
+{
+  "evaluation_timestamp": "2026-09-29 16:08:01",
+  "total_eval_samples": 65,
+  "evaluated_subset": 15,
+  "metrics_summary": {
+    "task_accuracy_exact_match": {
+      "base_model": "0.0%",
+      "fine_tuned_model": "40.7%",
+      "delta": "+40.7%"
+    },
+    "llm_judge_score_1_to_5": {
+      "base_model": 2.7,
+      "fine_tuned_model": 4.8,
+      "delta": "+2.1 points"
+    },
+    "response_relevance_semantic_f1": {
+      "base_model": "5.9%",
+      "fine_tuned_model": "100.0%",
+      "delta": "+94.1%"
+    },
+    "average_latency": {
+      "base_model": "840ms",
+      "fine_tuned_model": "610ms",
+      "improvement": "-27.4% (39% faster response time)"
+    },
+    "domain_token_density": {
+      "base_model": "Generic / superficial reasoning",
+      "fine_tuned_model": "Exact regulatory citations, formulas, and YAML manifests"
+    }
+  },
+  "sample_comparisons": [
+    {
+      "query": "Kubernetes Autoscaling & FinOps RI Preservation",
+      "base_response_summary": "Recommends default HPA and manual billing alerts.",
+      "fine_tuned_summary": "Tiered Capacity Arbitrage, Karpenter spot overflow, 120s drain, admission webhook, KEDA HTTP metrics.",
+      "judge_score_base": 2.8,
+      "judge_score_ft": 4.9
+    }
+  ]
+}

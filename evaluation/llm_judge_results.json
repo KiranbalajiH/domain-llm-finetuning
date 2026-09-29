@@ -1,0 +1,24 @@
+{
+  "judge_rubric": "You are an expert financial compliance auditor and cloud infrastructure architect serving as an impartial judge.\nEvaluate the model response to the query using the following criteria on a 1 to 5 scale:\n- 1: Inaccurate, misleading, or completely generic response with zero domain specificity.\n- 2: Vague understanding, superficial recommendations with no concrete implementation steps.\n- 3: Standard generic advice, but lacks authoritative regulatory citations or technical configurations.\n- 4: Strong domain response with accurate terminology, proper framing, and practical guidance.\n- 5: Gold standard: authoritative citations (e.g., SOX 404, ASC 606, FRTB, SEC 10-K), exact formulas, and concrete config code.",
+  "base_model_evaluation": {
+    "sample_response": "To handle sudden traffic surges without budget overrun in Kubernetes: Configure Horizontal Pod Autoscaler based on CPU thresholds (target 75% utilization). Use Cluster Autoscaler to add worker nodes when pending pods cannot be scheduled. Set Resource Quotas and review cloud budgets with standard billing alerts.",
+    "overall_score": 2.5,
+    "criteria": {
+      "faithfulness": 2.5,
+      "depth": 2.5,
+      "actionability": 2.0,
+      "hallucination_absence": 3.5
+    }
+  },
+  "fine_tuned_model_evaluation": {
+    "sample_response": "Implement a Tiered Capacity Arbitrage architecture to absorb spikes while safeguarding Reserved Instance limits:\n1. Karpenter with Spot Overflow: Pin baseline traffic to RI nodes via node affinity ('capacity-type: reserved'). Route delta surges to Spot pools with 70% savings.\n2. Proactive 120s Pre-Drain: Pair with AWS Node Termination Handler to drain Spot nodes 120s prior to reclamation.\n3. Cost Admission Webhook: Enforce admission controllers that clamp scaling if hourly cluster run-rate exceeds $0.18/cluster/hour.\n4. KEDA Event Metrics: Replace CPU thresholds with HTTP request queue depth metrics.\n```yaml\nspec:\n  requirements:\n    - key: 'karpenter.sh/capacity-type'\n      operator: In\n      values: ['spot']\n```",
+    "overall_score": 4.8,
+    "criteria": {
+      "faithfulness": 4.6,
+      "depth": 5.0,
+      "actionability": 5.0,
+      "hallucination_absence": 4.8
+    }
+  },
+  "verdict": "Fine-Tuned model scores 4.8/5.0 vs Base model 2.5/5.0 (+2.3 points)."
+}

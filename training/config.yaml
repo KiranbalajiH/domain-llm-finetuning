@@ -1,0 +1,55 @@
+# QLoRA Fine-Tuning Configuration for Finance & Compliance Assistant
+# Aligned with Implementation Plan (Phases 3 & 4)
+
+model:
+  base_model_id: "mistralai/Mistral-7B-Instruct-v0.2"
+  model_max_length: 2048
+  torch_dtype: "bfloat16"
+  device_map: "auto"
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true
+  bnb_4bit_compute_dtype: "bfloat16"
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+training:
+  output_dir: "./adapters/finops_qlora_adapter"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  logging_steps: 10
+  save_strategy: "steps"
+  save_steps: 50
+  save_total_limit: 2
+  eval_strategy: "steps"
+  eval_steps: 50
+  fp16: false
+  bf16: true
+  optim: "paged_adamw_8bit"
+  gradient_checkpointing: true
+
+data:
+  train_file: "data/processed/train.jsonl"
+  eval_file: "data/processed/eval.jsonl"
+  dataset_text_field: "text"

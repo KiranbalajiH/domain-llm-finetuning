@@ -1,0 +1,20 @@
+{
+  "total_examples": 650,
+  "train_examples": 585,
+  "eval_examples": 65,
+  "train_eval_ratio": "90% / 10%",
+  "categories": [
+    "cloud_finops_governance",
+    "corporate_accounting_sox",
+    "algorithmic_risk_and_basel_iii",
+    "sec_filings_and_disclosure",
+    "financial_regulatory_compliance"
+  ],
+  "train_file": "c:/Users/kiran/antigravity K/LLM/data\\processed\\train.jsonl",
+  "eval_file": "c:/Users/kiran/antigravity K/LLM/data\\processed\\eval.jsonl",
+  "sample_format": {
+    "instruction": "Provide an audit-grade technical assessment: Formulate a policy for managing AWS S3 storage tier transitions for archival financial audit records. Structure your response with concrete policy controls and numerical indicators.",
+    "input": "Compliance requirement: SEC Rule 17a-4 mandates 7-year immutable retention with sub-millisecond retrieval in year 1, transitioning to cold archive thereafter. [Requirement Category: Cloud Finops Governance]",
+    "output": "For SEC Rule 17a-4 compliant S3 lifecycle architecture:\n\n1. S3 Object Lock in Compliance Mode: Set legal hold and retent..."
+  }
+}
